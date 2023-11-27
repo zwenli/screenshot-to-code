@@ -33,12 +33,22 @@ import html2canvas from "html2canvas";
 import { USER_CLOSE_WEB_SOCKET_CODE } from "./constants";
 
 function App() {
+  // 应用状态，三个状态
+  // INITIAL（初始，此时界面上是展示上传图片）、
+  // CODING（生成代码中，一些展示效果，待确认） 、
+  // CODE_READY（代码生成完毕，展示结果，还可以操作update）
   const [appState, setAppState] = useState<AppState>(AppState.INITIAL);
+  // 生成的代码
   const [generatedCode, setGeneratedCode] = useState<string>("");
+  // 截图
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
+  // 执行日志，在 generateCode 时，会接收到 “status” 类型的消息，其内容就会保存在这里
   const [executionConsole, setExecutionConsole] = useState<string[]>([]);
+  // 更新指令，告诉 AI 要改变什么，即 textarea 输入的内容
   const [updateInstruction, setUpdateInstruction] = useState("");
+  // 历史，记录update，存放的结果大体为[generatedCode, updateInstruction]
   const [history, setHistory] = useState<string[]>([]);
+  // 设置，先忽略
   const [settings, setSettings] = usePersistedState<Settings>(
     {
       openAiApiKey: null,
@@ -49,10 +59,13 @@ function App() {
     },
     "setting"
   );
+  // 是否包含当前版本的屏幕截图
   const [shouldIncludeResultImage, setShouldIncludeResultImage] =
     useState<boolean>(false);
+  // 通过 websocket 与后台通信
   const wsRef = useRef<WebSocket>(null);
 
+  // 获取当前 desktop 预览的截图
   const takeScreenshot = async (): Promise<string> => {
     const iframeElement = document.querySelector(
       "#preview-desktop"
@@ -91,6 +104,7 @@ function App() {
     setHistory([]);
   };
 
+  // 停止按钮
   const stop = () => {
     wsRef.current?.close?.(USER_CLOSE_WEB_SOCKET_CODE);
     // make sure stop can correct the state even if the websocket is already closed
@@ -103,21 +117,23 @@ function App() {
 
     // Merge settings with params
     const updatedParams = { ...params, ...settings };
-
+    // 生成代码的核心函数
     generateCode(
       wsRef,
       updatedParams,
-      (token) => setGeneratedCode((prev) => prev + token),
-      (code) => setGeneratedCode(code),
-      (line) => setExecutionConsole((prev) => [...prev, line]),
+      (token) => setGeneratedCode((prev) => prev + token), // chunk
+      (code) => setGeneratedCode(code), // 完整代码
+      (line) => setExecutionConsole((prev) => [...prev, line]), // 状态更新
       () => setAppState(AppState.CODE_READY)
     );
   }
 
   // Initial version creation
+  // 初始版本的创建，截图选择或者输入图片URL后触发
   function doCreate(referenceImages: string[]) {
     setReferenceImages(referenceImages);
     if (referenceImages.length > 0) {
+      // 初始版本，只需要截图
       doGenerateCode({
         generationType: "create",
         image: referenceImages[0],
@@ -126,10 +142,12 @@ function App() {
   }
 
   // Subsequent updates
+  // 后续更新，update 按钮
   async function doUpdate() {
     const updatedHistory = [...history, generatedCode, updateInstruction];
     if (shouldIncludeResultImage) {
       const resultImage = await takeScreenshot();
+      // 更新版本，需要截图，历史记录(包含了updateInstruction)，当前版本的截图（如果有）
       doGenerateCode({
         generationType: "update",
         image: referenceImages[0],
@@ -148,7 +166,11 @@ function App() {
     setGeneratedCode("");
     setUpdateInstruction("");
   }
-
+  // 复制代码
+  // useCallback是React提供的一个钩子函数，它用于缓存函数的引用，以便在依赖项未更改时不会重新创建函数。
+  // 在这里，generatedCode作为依赖项传递给useCallback，
+  // 这意味着只有当generatedCode发生变化时，才会创建新的doCopyCode函数。
+  // 这可以帮助提高性能，避免不必要的函数重新创建。
   const doCopyCode = useCallback(() => {
     copy(generatedCode);
     toast.success("Copied to clipboard");
@@ -193,6 +215,7 @@ function App() {
                 <div className="flex flex-col">
                   <div className="flex items-center gap-x-1">
                     <Spinner />
+                    {/* 展示当前最新的一条执行日志 */}
                     {executionConsole.slice(-1)[0]}
                   </div>
                   <div className="flex mt-4 w-full">
@@ -200,6 +223,7 @@ function App() {
                       Stop
                     </Button>
                   </div>
+                  {/* 行内样式的内容预览 */}
                   <CodePreview code={generatedCode} />
                 </div>
               )}

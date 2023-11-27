@@ -34,18 +34,24 @@ export function generateCode(
   });
 
   ws.addEventListener("message", async (event: MessageEvent) => {
+    // 接受消息
     const response = JSON.parse(event.data);
+    // 根据消息类型进行处理
     if (response.type === "chunk") {
+      // 代码块
       onChange(response.value);
     } else if (response.type === "status") {
+      // 状态
       onStatusUpdate(response.value);
     } else if (response.type === "setCode") {
+      // 完整的代码
       onSetCode(response.value);
     } else if (response.type === "error") {
       console.error("Error generating code", response.value);
       toast.error(response.value);
     }
   });
+  // 关闭
   ws.addEventListener("close", (event) => {
     console.log("Connection closed", event.code, event.reason);
     if (event.code === USER_CLOSE_WEB_SOCKET_CODE) {
